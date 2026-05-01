@@ -51,7 +51,9 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
     const addReminder = useRemindersStore((s) => s.addReminder);
     const updateReminder = useRemindersStore((s) => s.updateReminder);
 
-    const isDark = useColorScheme() === 'dark';
+    const theme = useRemindersStore(s => s.theme);
+    const systemScheme = useColorScheme();
+    const isDark = theme === 'system' ? systemScheme === 'dark' : theme === 'dark';
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [title, setTitle] = useState('');
@@ -250,7 +252,7 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
           <View style={[styles.settingsRow, { marginTop: 24 }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.label, { color: textColor, marginTop: 0 }]}>Notificación Permanente</Text>
-              <Text style={[styles.helperText, { color: mutedColor }]}>No se podrá descartar deslizando</Text>
+              <Text style={[styles.helperText, { color: mutedColor }]}>No se podrá eliminar la notificación hasta que se complete o elimine el recordatorio</Text>
             </View>
             <Switch
               value={isPermanent}

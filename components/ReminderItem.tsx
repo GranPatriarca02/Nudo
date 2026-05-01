@@ -16,6 +16,7 @@ import Reanimated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 
+import { useRemindersStore } from '../utils/remindersStore';
 import type { Reminder } from '../utils/types';
 
 type Props = {
@@ -82,7 +83,10 @@ export function ReminderItem({ reminder, onComplete, onDelete, onEdit }: Props) 
     computeRemaining(reminder.targetDate),
   );
   const swipeableRef = useRef<SwipeableMethods>(null);
-  const isDark = useColorScheme() === 'dark';
+  
+  const theme = useRemindersStore(s => s.theme);
+  const systemScheme = useColorScheme();
+  const isDark = theme === 'system' ? systemScheme === 'dark' : theme === 'dark';
 
   // Contador en tiempo real. Se reinicia si cambia la fecha objetivo o si el
   // usuario marca/desmarca como completado. Si ya está completado o la fecha
@@ -144,7 +148,12 @@ export function ReminderItem({ reminder, onComplete, onDelete, onEdit }: Props) 
       onSwipeableOpen={handleSwipeOpen}
     >
       <View style={[styles.row, { backgroundColor: isDark ? '#222' : '#fff', borderBottomColor: isDark ? '#333' : '#e5e5e5' }]}>
-        <TouchableOpacity style={styles.info} onPress={() => onEdit(reminder)}>
+        <TouchableOpacity 
+          style={styles.info} 
+          onPress={() => {
+            if (!reminder.isCompleted) onEdit(reminder);
+          }}
+        >
           <Text
             style={[
               styles.title,
@@ -168,6 +177,11 @@ export function ReminderItem({ reminder, onComplete, onDelete, onEdit }: Props) 
           <Text style={styles.targetDate}>
             {new Date(reminder.targetDate).toLocaleString()}
           </Text>
+          {!reminder.isCompleted && (
+            <Text style={[styles.hintText, { color: isDark ? '#777' : '#999' }]}>
+              👉 Desliza a la derecha para completar
+            </Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -223,6 +237,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#666',
+  },
+  hintText: {
+    marginTop: 4,
+    fontSize: 11,
+    fontStyle: 'italic',
   },
   deleteButton: {
     paddingHorizontal: 8,

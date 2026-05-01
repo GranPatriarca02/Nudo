@@ -17,13 +17,18 @@ export default function Index() {
 
   const sheetRef = useRef<AddReminderSheetMethods>(null);
 
-  const isDark = useColorScheme() === 'dark';
+  const theme = useRemindersStore((s) => s.theme);
+  const setTheme = useRemindersStore((s) => s.setTheme);
+  const systemScheme = useColorScheme();
+  const isDark = theme === 'system' ? systemScheme === 'dark' : theme === 'dark';
+
   const bgColor = isDark ? '#111' : '#fafafa';
   const textColor = isDark ? '#eee' : '#111';
   const headerBg = isDark ? '#222' : '#fff';
 
   const toggleTheme = () => {
-    Appearance.setColorScheme(isDark ? 'light' : 'dark');
+    const nextTheme = isDark ? 'light' : 'dark';
+    setTheme(nextTheme);
   };
 
   return (

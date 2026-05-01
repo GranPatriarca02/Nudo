@@ -39,6 +39,10 @@ type RemindersState = {
 
   /** Elimina el recordatorio y cancela cualquier notificación pendiente. */
   deleteReminder: (id: string) => Promise<void>;
+
+  /** Tema visual preferido de la aplicación. */
+  theme: 'system' | 'light' | 'dark';
+  setTheme: (theme: 'system' | 'light' | 'dark') => void;
 };
 
 const generateId = (): string =>
@@ -47,6 +51,8 @@ const generateId = (): string =>
 export const useRemindersStore = create<RemindersState>()(
   persist(
     (set, get) => ({
+      theme: 'system',
+      setTheme: (theme) => set({ theme }),
       reminders: [],
 
       addReminder: async (input) => {
@@ -179,24 +185,31 @@ export const useRemindersStore = create<RemindersState>()(
         replacer: dateReplacer,
         reviver: dateReviver,
       }),
-      partialize: (state) => ({ reminders: state.reminders }),
-      version: 2,
+      partialize: (state) => ({ reminders: state.reminders, theme: state.theme }),
+      version: 3,
       // Migración v1→v2: añadimos `alertOffsetHours` y `isPermanent` a los
       // recordatorios persistidos antes de existir esos campos. Defaults:
       // 24h de antelación y notificación permanente, que es como se venía
       // comportando la app hasta ahora.
       migrate: (persistedState: unknown, version: number) => {
-        if (version < 2 && persistedState && typeof persistedState === 'object') {
-          const old = persistedState as { reminders?: Reminder[] };
-          return {
-            reminders: (old.reminders ?? []).map((r) => ({
+        let state = persistedState as any;
+        if (version < 2 && state) {
+          state = {
+            ...state,
+            reminders: (state.reminders ?? []).map((r: any) => ({
               ...r,
               alertOffsetHours: r.alertOffsetHours ?? DEFAULT_ALERT_OFFSET,
               isPermanent: r.isPermanent ?? true,
             })),
           };
         }
-        return persistedState as { reminders: Reminder[] };
+        if (version < 3 && state) {
+          state = {
+            ...state,
+            theme: state.theme ?? 'system',
+          };
+        }
+        return state as RemindersState;
       },
     },
   ),
