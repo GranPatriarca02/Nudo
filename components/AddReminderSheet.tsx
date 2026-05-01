@@ -23,12 +23,15 @@ import {
   StyleSheet,
   Text,
   View,
+  Switch,
+  useColorScheme,
 } from 'react-native';
 
 import { useRemindersStore } from '../utils/remindersStore';
+import type { Reminder } from '../utils/types';
 
 export type AddReminderSheetMethods = {
-  open: () => void;
+  open: (reminderToEdit?: Reminder) => void;
   close: () => void;
 };
 
@@ -46,19 +49,36 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
   (_props, ref) => {
     const sheetRef = useRef<BottomSheet>(null);
     const addReminder = useRemindersStore((s) => s.addReminder);
+    const updateReminder = useRemindersStore((s) => s.updateReminder);
 
+    const isDark = useColorScheme() === 'dark';
+
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [title, setTitle] = useState('');
-    const [targetDate, setTargetDate] = useState<Date>(getDefaultTargetDate);
+    const [targetDate, setTargetDate] = useState<Date>(getDefaultTargetDate());
+    const [isPermanent, setIsPermanent] = useState(true);
+    const [alertOffsetHours, setAlertOffsetHours] = useState(24);
+    
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
 
-    const snapPoints = useMemo(() => ['70%'], []);
+    const snapPoints = useMemo(() => ['85%'], []);
 
     useImperativeHandle(ref, () => ({
-      open: () => {
-        // Resetear el formulario cada vez que se abre.
-        setTitle('');
-        setTargetDate(getDefaultTargetDate());
+      open: (reminderToEdit?: Reminder) => {
+        if (reminderToEdit) {
+          setEditingId(reminderToEdit.id);
+          setTitle(reminderToEdit.title);
+          setTargetDate(new Date(reminderToEdit.targetDate));
+          setIsPermanent(reminderToEdit.isPermanent ?? true);
+          setAlertOffsetHours(reminderToEdit.alertOffsetHours ?? 24);
+        } else {
+          setEditingId(null);
+          setTitle('');
+          setTargetDate(getDefaultTargetDate());
+          setIsPermanent(true);
+          setAlertOffsetHours(24);
+        }
         setShowDatePicker(false);
         setShowTimePicker(false);
         sheetRef.current?.expand();
@@ -132,12 +152,29 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
         );
         return;
       }
-      addReminder({
-        title: title.trim(),
-        targetDate,
-      });
+      if (editingId) {
+        updateReminder(editingId, {
+          title: title.trim(),
+          targetDate,
+          isPermanent,
+          alertOffsetHours,
+        });
+      } else {
+        addReminder({
+          title: title.trim(),
+          targetDate,
+          isPermanent,
+          alertOffsetHours,
+        });
+      }
       sheetRef.current?.close();
     };
+
+    const bgColor = isDark ? '#222' : '#fff';
+    const textColor = isDark ? '#eee' : '#111';
+    const mutedColor = isDark ? '#aaa' : '#555';
+    const inputBg = isDark ? '#333' : '#fafafa';
+    const borderColor = isDark ? '#444' : '#ddd';
 
     return (
       <BottomSheet
@@ -148,13 +185,17 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: bgColor }}
+        handleIndicatorStyle={{ backgroundColor: isDark ? '#888' : '#ccc' }}
       >
         <BottomSheetView style={styles.container}>
-          <Text style={styles.heading}>Nuevo recordatorio</Text>
+          <Text style={[styles.heading, { color: textColor }]}>
+            {editingId ? 'Editar recordatorio' : 'Nuevo recordatorio'}
+          </Text>
 
-          <Text style={styles.label}>Título</Text>
+          <Text style={[styles.label, { color: mutedColor }]}>Título</Text>
           <BottomSheetTextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: inputBg, color: textColor, borderColor }]}
             placeholder="Ej. Llamar a mamá"
             placeholderTextColor="#aaa"
             value={title}
@@ -163,23 +204,23 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
             returnKeyType="done"
           />
 
-          <Text style={styles.label}>Fecha y hora</Text>
+          <Text style={[styles.label, { color: mutedColor }]}>Fecha y hora</Text>
           <View style={styles.dateRow}>
             <Pressable
-              style={styles.dateButton}
+              style={[styles.dateButton, { backgroundColor: inputBg, borderColor }]}
               onPress={() => setShowDatePicker(true)}
             >
-              <Ionicons name="calendar-outline" size={18} color="#333" />
-              <Text style={styles.dateButtonText}>
+              <Ionicons name="calendar-outline" size={18} color={textColor} />
+              <Text style={[styles.dateButtonText, { color: textColor }]}>
                 {targetDate.toLocaleDateString()}
               </Text>
             </Pressable>
             <Pressable
-              style={styles.dateButton}
+              style={[styles.dateButton, { backgroundColor: inputBg, borderColor }]}
               onPress={() => setShowTimePicker(true)}
             >
-              <Ionicons name="time-outline" size={18} color="#333" />
-              <Text style={styles.dateButtonText}>
+              <Ionicons name="time-outline" size={18} color={textColor} />
+              <Text style={[styles.dateButtonText, { color: textColor }]}>
                 {targetDate.toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
@@ -206,17 +247,39 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
             />
           )}
 
-          <View style={styles.premiumGroup}>
-            <PremiumLockedRow
-              icon="image-outline"
-              label="Añadir Foto"
-              onPress={() => showPremiumLockedAlert('Añadir Foto')}
+          <View style={[styles.settingsRow, { marginTop: 24 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, { color: textColor, marginTop: 0 }]}>Notificación Permanente</Text>
+              <Text style={[styles.helperText, { color: mutedColor }]}>No se podrá descartar deslizando</Text>
+            </View>
+            <Switch
+              value={isPermanent}
+              onValueChange={setIsPermanent}
+              trackColor={{ true: '#2a8', false: borderColor }}
             />
-            <PremiumLockedRow
-              icon="notifications-outline"
-              label="Personalizar Avisos"
-              onPress={() => showPremiumLockedAlert('Personalizar Avisos')}
-            />
+          </View>
+
+          <Text style={[styles.label, { color: mutedColor, marginTop: 24 }]}>Avisarme antes de la meta</Text>
+          <View style={styles.dateRow}>
+            {[24, 12, 6].map((hours) => (
+              <Pressable
+                key={hours}
+                style={[
+                  styles.dateButton,
+                  { backgroundColor: inputBg, borderColor },
+                  alertOffsetHours === hours && { backgroundColor: '#2a8', borderColor: '#2a8' }
+                ]}
+                onPress={() => setAlertOffsetHours(hours)}
+              >
+                <Text style={[
+                  styles.dateButtonText, 
+                  { color: textColor, textAlign: 'center', width: '100%' },
+                  alertOffsetHours === hours && { color: '#fff', fontWeight: '700' }
+                ]}>
+                  {hours}h
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
           <Pressable
@@ -227,7 +290,9 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
             onPress={handleSubmit}
             disabled={!canSubmit}
           >
-            <Text style={styles.submitButtonText}>Crear recordatorio</Text>
+            <Text style={styles.submitButtonText}>
+              {editingId ? 'Guardar cambios' : 'Crear recordatorio'}
+            </Text>
           </Pressable>
         </BottomSheetView>
       </BottomSheet>
@@ -359,5 +424,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  helperText: {
+    fontSize: 12,
   },
 });

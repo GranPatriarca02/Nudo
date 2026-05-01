@@ -10,18 +10,29 @@ import {
   dateReviver,
   mmkvZustandStorage,
 } from './storage';
-import type { NewReminderInput, Reminder } from './types';
+import {
+  DEFAULT_ALERT_OFFSET,
+  type NewReminderInput,
+  type Reminder,
+  type UpdateReminderInput,
+} from './types';
 
 type RemindersState = {
   reminders: Reminder[];
 
   /**
-   * Crea un recordatorio nuevo, programa la notificación local sticky
-   * 24h antes (o 1h antes como respaldo si falta menos de 24h) y guarda
-   * el ID resultante en `notificationIds`. Es asíncrono porque
-   * `scheduleNotificationAsync` lo es.
+   * Crea un recordatorio nuevo y programa su notificación. Si la
+   * programación falla (sin permisos, error nativo) el recordatorio se
+   * guarda igualmente con `notificationIds: []` para no perder los datos.
    */
   addReminder: (input: NewReminderInput) => Promise<Reminder>;
+
+  /**
+   * Aplica cambios a un recordatorio existente. Cancela las notificaciones
+   * antiguas y programa las nuevas, ya que el title/targetDate/offset/
+   * permanent pueden haber cambiado.
+   */
+  updateReminder: (id: string, input: UpdateReminderInput) => Promise<void>;
 
   /** Marca como completado y cancela cualquier notificación pendiente. */
   completeReminder: (id: string) => Promise<void>;
@@ -40,23 +51,20 @@ export const useRemindersStore = create<RemindersState>()(
 
       addReminder: async (input) => {
         const id = generateId();
-
         // Defensivo: aunque `input.targetDate` debería llegar como Date desde
         // el formulario, lo reconstruimos por si en algún punto se serializa.
         const targetDate = new Date(input.targetDate);
 
-        // Programar la notificación ANTES de guardar el recordatorio para
-        // que quede atómico: si falla la programación, no añadimos el item.
         let notificationIds: string[] = [];
         try {
           notificationIds = await scheduleReminderNotification(
             id,
             input.title,
             targetDate,
+            input.alertOffsetHours,
+            input.isPermanent,
           );
         } catch (err) {
-          // Si fallan los permisos o el servicio, seguimos guardando el
-          // recordatorio sin notificación; el usuario lo ve en la lista.
           console.warn('[Nudo] No se pudo programar la notificación:', err);
         }
 
@@ -67,10 +75,66 @@ export const useRemindersStore = create<RemindersState>()(
           imageUri: input.imageUri,
           notificationIds,
           isCompleted: false,
+          alertOffsetHours: input.alertOffsetHours,
+          isPermanent: input.isPermanent,
         };
 
         set((state) => ({ reminders: [...state.reminders, reminder] }));
         return reminder;
+      },
+
+      updateReminder: async (id, input) => {
+        const existing = get().reminders.find((r) => r.id === id);
+        if (!existing) return;
+
+        // Cancelamos las viejas antes de programar nuevas para no dejar
+        // notificaciones huérfanas si el target o el offset cambian.
+        if (existing.notificationIds.length > 0) {
+          await cancelReminderNotifications(existing.notificationIds).catch(
+            (err) =>
+              console.warn(
+                '[Nudo] Error cancelando notificaciones al editar:',
+                err,
+              ),
+          );
+        }
+
+        const targetDate = new Date(input.targetDate);
+
+        let notificationIds: string[] = [];
+        if (!existing.isCompleted) {
+          // Solo re-programamos si el recordatorio sigue activo.
+          try {
+            notificationIds = await scheduleReminderNotification(
+              id,
+              input.title,
+              targetDate,
+              input.alertOffsetHours,
+              input.isPermanent,
+            );
+          } catch (err) {
+            console.warn(
+              '[Nudo] No se pudo re-programar la notificación al editar:',
+              err,
+            );
+          }
+        }
+
+        set((state) => ({
+          reminders: state.reminders.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  title: input.title,
+                  targetDate,
+                  imageUri: input.imageUri,
+                  alertOffsetHours: input.alertOffsetHours,
+                  isPermanent: input.isPermanent,
+                  notificationIds,
+                }
+              : r,
+          ),
+        }));
       },
 
       completeReminder: async (id) => {
@@ -116,7 +180,24 @@ export const useRemindersStore = create<RemindersState>()(
         reviver: dateReviver,
       }),
       partialize: (state) => ({ reminders: state.reminders }),
-      version: 1,
+      version: 2,
+      // Migración v1→v2: añadimos `alertOffsetHours` y `isPermanent` a los
+      // recordatorios persistidos antes de existir esos campos. Defaults:
+      // 24h de antelación y notificación permanente, que es como se venía
+      // comportando la app hasta ahora.
+      migrate: (persistedState: unknown, version: number) => {
+        if (version < 2 && persistedState && typeof persistedState === 'object') {
+          const old = persistedState as { reminders?: Reminder[] };
+          return {
+            reminders: (old.reminders ?? []).map((r) => ({
+              ...r,
+              alertOffsetHours: r.alertOffsetHours ?? DEFAULT_ALERT_OFFSET,
+              isPermanent: r.isPermanent ?? true,
+            })),
+          };
+        }
+        return persistedState as { reminders: Reminder[] };
+      },
     },
   ),
 );

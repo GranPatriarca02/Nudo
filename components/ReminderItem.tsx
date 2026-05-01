@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useColorScheme,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -19,6 +22,7 @@ type Props = {
   reminder: Reminder;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (reminder: Reminder) => void;
 };
 
 const SWIPE_ACTION_WIDTH = 120;
@@ -68,16 +72,17 @@ function CompleteAction({
 
   return (
     <Reanimated.View style={[styles.completeAction, animatedStyle]}>
-      <Text style={styles.completeActionText}>Completar</Text>
+      <Ionicons name="checkmark-circle-outline" size={32} color="#fff" />
     </Reanimated.View>
   );
 }
 
-export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
+export function ReminderItem({ reminder, onComplete, onDelete, onEdit }: Props) {
   const [remaining, setRemaining] = useState<number>(() =>
     computeRemaining(reminder.targetDate),
   );
   const swipeableRef = useRef<SwipeableMethods>(null);
+  const isDark = useColorScheme() === 'dark';
 
   // Contador en tiempo real. Se reinicia si cambia la fecha objetivo o si el
   // usuario marca/desmarca como completado. Si ya está completado o la fecha
@@ -114,6 +119,18 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
     ? 'Completado'
     : formatCountdown(remaining);
   const isExpired = !reminder.isCompleted && remaining <= 0;
+  const isWarning = !reminder.isCompleted && remaining > 0 && remaining <= reminder.alertOffsetHours * 3600000;
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Eliminar Recordatorio',
+      '¿Estás seguro de que quieres eliminar este recordatorio?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => onDelete(reminder.id) },
+      ]
+    );
+  };
 
   return (
     <ReanimatedSwipeable
@@ -126,11 +143,12 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
       )}
       onSwipeableOpen={handleSwipeOpen}
     >
-      <View style={styles.row}>
-        <View style={styles.info}>
+      <View style={[styles.row, { backgroundColor: isDark ? '#222' : '#fff', borderBottomColor: isDark ? '#333' : '#e5e5e5' }]}>
+        <TouchableOpacity style={styles.info} onPress={() => onEdit(reminder)}>
           <Text
             style={[
               styles.title,
+              { color: isDark ? '#eee' : '#111' },
               reminder.isCompleted && styles.titleCompleted,
             ]}
             numberOfLines={1}
@@ -141,6 +159,7 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
             style={[
               styles.countdown,
               reminder.isCompleted && styles.countdownCompleted,
+              isWarning && styles.countdownWarning,
               isExpired && styles.countdownExpired,
             ]}
           >
@@ -149,14 +168,14 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
           <Text style={styles.targetDate}>
             {new Date(reminder.targetDate).toLocaleString()}
           </Text>
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => onDelete(reminder.id)}
+          onPress={handleDelete}
           hitSlop={8}
           style={styles.deleteButton}
         >
-          <Text style={styles.deleteButtonText}>Borrar</Text>
+          <Ionicons name="trash-outline" size={24} color="#d33" />
         </TouchableOpacity>
       </View>
     </ReanimatedSwipeable>
@@ -165,11 +184,9 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    backgroundColor: '#fff',
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e5e5',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -179,7 +196,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111',
   },
   titleCompleted: {
     color: '#888',
@@ -188,11 +204,16 @@ const styles = StyleSheet.create({
   countdown: {
     marginTop: 4,
     fontSize: 14,
-    color: '#2a8',
+    color: '#666',
     fontVariant: ['tabular-nums'],
   },
   countdownCompleted: {
-    color: '#888',
+    color: '#2a8',
+    fontWeight: '600',
+  },
+  countdownWarning: {
+    color: '#d33',
+    fontWeight: '600',
   },
   countdownExpired: {
     color: '#d33',
@@ -216,10 +237,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a8',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  completeActionText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

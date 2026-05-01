@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import type { AlertOffsetHours } from './types';
+
 /**
  * Identificador del canal de Android. Cada notificación que programemos en
  * Android pasará por este canal, así que las opciones de importancia y
@@ -10,7 +12,6 @@ import { Platform } from 'react-native';
 const ANDROID_CHANNEL_ID = 'nudo-reminders';
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Configura cómo se muestran las notificaciones cuando la app está en primer
@@ -55,52 +56,60 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Decide cuándo debe sonar la notificación. La regla acordada con producto:
- *  - Si quedan 24h o más hasta `targetDate` → 24h antes.
- *  - Si quedan menos de 24h pero más de 1h → 1h antes (respaldo).
- *  - Si quedan menos de 1h → no se programa nada (devuelve null).
+ * Calcula el momento exacto en que debe sonar la notificación dada la fecha
+ * objetivo y la antelación elegida (24h, 12h o 6h). Devuelve `null` si esa
+ * fecha resultante ya pasó o está demasiado cerca de ahora (margen 30s)
+ * para evitar disparar notificaciones inmediatas que confundirían al
+ * usuario.
  */
-function computeTriggerDate(targetDate: Date): Date | null {
+function computeTriggerDate(
+  targetDate: Date,
+  alertOffsetHours: AlertOffsetHours,
+): Date | null {
   // Defensivo: Zustand/MMKV pueden devolver `targetDate` como string ISO,
   // así que reconstruimos el Date antes de hacer aritmética.
   const target = new Date(targetDate);
-  const targetMs = target.getTime();
-  const now = Date.now();
-  const msUntilTarget = targetMs - now;
-
-  if (msUntilTarget >= DAY_MS) return new Date(targetMs - DAY_MS);
-  if (msUntilTarget >= HOUR_MS) return new Date(targetMs - HOUR_MS);
-  return null;
+  const triggerMs = target.getTime() - alertOffsetHours * HOUR_MS;
+  // 30 segundos de colchón para evitar programaciones casi-inmediatas.
+  if (triggerMs <= Date.now() + 30 * 1000) return null;
+  return new Date(triggerMs);
 }
 
 /**
- * Programa una notificación local "pegajosa" (no descartable) para el
- * recordatorio dado. Devuelve un array con los IDs generados (vacío si la
- * fecha está demasiado próxima/pasada para programar nada).
+ * Programa la notificación local del recordatorio. Si `isPermanent` es
+ * verdadero, en Android la notificación quedará "ongoing": no se podrá
+ * descartar deslizando ni se borrará al pulsarla. En iOS estos flags se
+ * ignoran (el sistema operativo no permite notificaciones no descartables).
  *
- * `sticky: true` + `autoDismiss: false` hace que en Android la notificación
- * permanezca en el panel hasta que la app la cancele explícitamente. En iOS
- * estos flags se ignoran (iOS no permite notificaciones no descartables),
- * pero la notificación se programa igualmente.
+ * Devuelve un array con los IDs (vacío si la fecha está demasiado próxima).
  */
 export async function scheduleReminderNotification(
   reminderId: string,
   title: string,
   targetDate: Date,
+  alertOffsetHours: AlertOffsetHours,
+  isPermanent: boolean,
 ): Promise<string[]> {
-  const triggerDate = computeTriggerDate(targetDate);
+  const triggerDate = computeTriggerDate(targetDate, alertOffsetHours);
   if (!triggerDate) return [];
 
-  // Defensivo: aseguramos que `targetDate` sea Date para serializar bien.
   const target = new Date(targetDate);
 
   const id = await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Nudo - Recordatorio',
       body: title,
-      sticky: true,
-      autoDismiss: false,
-      data: { reminderId, targetDate: target.toISOString() },
+      // En Android `sticky:true` ⇒ setOngoing(true). `autoDismiss:false` ⇒
+      // no desaparece al pulsar la notificación. Sólo aplicamos ambos
+      // cuando el usuario marcó el recordatorio como permanente.
+      sticky: isPermanent,
+      autoDismiss: !isPermanent,
+      data: {
+        reminderId,
+        targetDate: target.toISOString(),
+        alertOffsetHours,
+        isPermanent,
+      },
     },
     trigger: {
       type: SchedulableTriggerInputTypes.DATE,
@@ -124,9 +133,7 @@ export async function cancelReminderNotifications(
 
   await Promise.all(
     notificationIds.flatMap((id) => [
-      // Cancela las que aún no han sonado.
       Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined),
-      // Descarta las ya entregadas (sticky en Android).
       Notifications.dismissNotificationAsync(id).catch(() => undefined),
     ]),
   );

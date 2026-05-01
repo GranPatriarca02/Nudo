@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 import { useRef } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Appearance, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 
 import {
   AddReminderSheet,
@@ -16,11 +17,29 @@ export default function Index() {
 
   const sheetRef = useRef<AddReminderSheetMethods>(null);
 
+  const isDark = useColorScheme() === 'dark';
+  const bgColor = isDark ? '#111' : '#fafafa';
+  const textColor = isDark ? '#eee' : '#111';
+  const headerBg = isDark ? '#222' : '#fff';
+
+  const toggleTheme = () => {
+    Appearance.setColorScheme(isDark ? 'light' : 'dark');
+  };
+
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Nudo - Mis Recordatorios</Text>
-      </View>
+    <View style={[styles.screen, { backgroundColor: bgColor }]}>
+      <Stack.Screen
+        options={{
+          title: 'Mis Recordatorios',
+          headerStyle: { backgroundColor: headerBg },
+          headerTintColor: textColor,
+          headerRight: () => (
+            <Pressable onPress={toggleTheme} style={{ marginRight: 8, padding: 8 }}>
+              <Ionicons name={isDark ? 'sunny' : 'moon'} size={24} color={textColor} />
+            </Pressable>
+          ),
+        }}
+      />
 
       <FlatList
         contentContainerStyle={styles.listContent}
@@ -32,11 +51,12 @@ export default function Index() {
           </Text>
         }
         renderItem={({ item }) => (
-          <ReminderItem
-            reminder={item}
-            onComplete={completeReminder}
-            onDelete={deleteReminder}
-          />
+            <ReminderItem
+              reminder={item}
+              onComplete={completeReminder}
+              onDelete={deleteReminder}
+              onEdit={(r) => sheetRef.current?.open(r)}
+            />
         )}
       />
 
@@ -56,20 +76,10 @@ export default function Index() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fafafa',
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 64,
-    paddingBottom: 12,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#111',
   },
   listContent: {
     paddingBottom: 120,
+    paddingTop: 16,
   },
   emptyText: {
     color: '#888',
