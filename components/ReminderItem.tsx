@@ -27,8 +27,10 @@ const SWIPE_ACTION_WIDTH = 120;
  * Calcula la diferencia en milisegundos entre `target` y el momento actual.
  * Devuelve un número que puede ser negativo si la fecha ya pasó.
  */
-const computeRemaining = (target: Date): number =>
-  target.getTime() - Date.now();
+const computeRemaining = (target: Date | string): number => {
+  const dateObj = typeof target === 'string' ? new Date(target) : target;
+  return dateObj.getTime() - Date.now();
+};
 
 /**
  * Convierte milisegundos restantes en el texto que se muestra al usuario.
@@ -145,7 +147,7 @@ export function ReminderItem({ reminder, onComplete, onDelete }: Props) {
             {countdownText}
           </Text>
           <Text style={styles.targetDate}>
-            {reminder.targetDate.toLocaleString()}
+            {new Date(reminder.targetDate).toLocaleString()}
           </Text>
         </View>
 
