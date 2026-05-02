@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { useRef } from 'react';
-import { Appearance, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import {
+  BackHandler,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
 
 import {
   AddReminderSheet,
@@ -9,6 +18,7 @@ import {
 } from '../components/AddReminderSheet';
 import { ReminderItem } from '../components/ReminderItem';
 import { useRemindersStore } from '../utils/remindersStore';
+import { useNudoTheme } from '../utils/theme';
 
 export default function Index() {
   const reminders = useRemindersStore((s) => s.reminders);
@@ -17,30 +27,93 @@ export default function Index() {
 
   const sheetRef = useRef<AddReminderSheetMethods>(null);
 
-  const theme = useRemindersStore((s) => s.theme);
-  const setTheme = useRemindersStore((s) => s.setTheme);
-  const systemScheme = useColorScheme();
-  const isDark = theme === 'system' ? systemScheme === 'dark' : theme === 'dark';
+  const { palette, effective, mode } = useNudoTheme();
+  const toggleTheme = useRemindersStore((s) => s.toggleTheme);
+  const isDark = effective === 'dark';
 
-  const bgColor = isDark ? '#111' : '#fafafa';
-  const textColor = isDark ? '#eee' : '#111';
-  const headerBg = isDark ? '#222' : '#fff';
+  /**
+   * Salir con doble back en la pantalla principal. Sólo Android — en iOS
+   * no hay botón "atrás" físico en la home. Si el sheet está abierto, su
+   * propio handler interceptará el back antes de que llegue aquí.
+   */
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let lastBackPress = 0;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const now = Date.now();
+      if (now - lastBackPress < 1000) {
+        // Segundo tap dentro del segundo: dejamos que Android salga.
+        return false;
+      }
+      lastBackPress = now;
+      ToastAndroid.show('Pulsa de nuevo para salir', ToastAndroid.SHORT);
+      return true; // consumido
+    });
+    return () => sub.remove();
+  }, []);
 
-  const toggleTheme = () => {
-    const nextTheme = isDark ? 'light' : 'dark';
-    setTheme(nextTheme);
+  const handleToggleTheme = () => {
+    toggleTheme(isDark);
   };
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: { flex: 1, backgroundColor: palette.background },
+        listContent: { paddingBottom: 120, paddingTop: 16 },
+        emptyText: {
+          color: palette.textMuted,
+          marginTop: 24,
+          textAlign: 'center',
+          paddingHorizontal: 16,
+        },
+        fab: {
+          position: 'absolute',
+          right: 24,
+          bottom: 32,
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          backgroundColor: palette.primary,
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
+        },
+        fabPressed: { backgroundColor: palette.primaryPressed },
+        headerButton: { marginRight: 8, padding: 8 },
+      }),
+    [palette],
+  );
+
+  // Pequeña etiqueta auxiliar para el icono según el modo elegido.
+  const themeIconName: keyof typeof Ionicons.glyphMap =
+    mode === 'system'
+      ? isDark
+        ? 'moon-outline'
+        : 'sunny-outline'
+      : isDark
+        ? 'sunny'
+        : 'moon';
+
   return (
-    <View style={[styles.screen, { backgroundColor: bgColor }]}>
+    <View style={styles.screen}>
       <Stack.Screen
         options={{
           title: 'Mis Recordatorios',
-          headerStyle: { backgroundColor: headerBg },
-          headerTintColor: textColor,
+          headerStyle: { backgroundColor: palette.surface },
+          headerTintColor: palette.text,
+          headerTitleStyle: { color: palette.text },
           headerRight: () => (
-            <Pressable onPress={toggleTheme} style={{ marginRight: 8, padding: 8 }}>
-              <Ionicons name={isDark ? 'sunny' : 'moon'} size={24} color={textColor} />
+            <Pressable
+              onPress={handleToggleTheme}
+              style={styles.headerButton}
+              accessibilityLabel="Cambiar tema"
+            >
+              <Ionicons name={themeIconName} size={24} color={palette.text} />
             </Pressable>
           ),
         }}
@@ -56,12 +129,12 @@ export default function Index() {
           </Text>
         }
         renderItem={({ item }) => (
-            <ReminderItem
-              reminder={item}
-              onComplete={completeReminder}
-              onDelete={deleteReminder}
-              onEdit={(r) => sheetRef.current?.open(r)}
-            />
+          <ReminderItem
+            reminder={item}
+            onComplete={completeReminder}
+            onDelete={deleteReminder}
+            onEdit={(r) => sheetRef.current?.open(r)}
+          />
         )}
       />
 
@@ -77,38 +150,3 @@ export default function Index() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  listContent: {
-    paddingBottom: 120,
-    paddingTop: 16,
-  },
-  emptyText: {
-    color: '#888',
-    marginTop: 24,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-  fab: {
-    position: 'absolute',
-    right: 24,
-    bottom: 32,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#2a8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  fabPressed: {
-    backgroundColor: '#207a5e',
-  },
-});

@@ -1,29 +1,29 @@
 /**
- * Tiempos válidos de antelación para el aviso de un recordatorio.
- * Mantenemos la lista cerrada para evitar valores arbitrarios y para
- * poder renderizar fácilmente un selector segmentado en el formulario.
+ * Tiempos válidos de antelación para los avisos de un recordatorio.
+ * Un recordatorio puede tener varios offsets a la vez (p.ej. avisar a 24h
+ * y a 1h del evento), por eso en `Reminder.alertOffsetHours` guardamos
+ * un array de estos valores.
  */
-export type AlertOffsetHours = 6 | 12 | 24;
+export type AlertOffsetHours = 1 | 6 | 12 | 24;
 
 export const ALERT_OFFSET_OPTIONS: readonly AlertOffsetHours[] = [
-  6, 12, 24,
+  1, 6, 12, 24,
 ] as const;
 
-export const DEFAULT_ALERT_OFFSET: AlertOffsetHours = 24;
+export const DEFAULT_ALERT_OFFSETS: readonly AlertOffsetHours[] = [24] as const;
 
 /**
  * Modelo de datos para un recordatorio.
  *
- * - `id`: identificador único del recordatorio.
+ * - `id`: identificador único.
  * - `title`: texto que se mostrará al usuario.
- * - `targetDate`: fecha y hora exacta en que debe dispararse el recordatorio.
- * - `imageUri`: URI opcional de una imagen adjunta. Función Premium.
- * - `notificationIds`: identificadores de las notificaciones programadas
- *   (devueltos por `expo-notifications`) para poder cancelarlas más tarde.
- * - `isCompleted`: indica si el usuario ya marcó el recordatorio como hecho.
- * - `alertOffsetHours`: antelación con la que debe sonar el aviso.
- * - `isPermanent`: si la notificación debe ser "ongoing" (no descartable
- *   con swipe ni con tap) o una notificación normal.
+ * - `targetDate`: fecha y hora exacta del evento.
+ * - `imageUri`: URI opcional de imagen adjunta. Función Premium.
+ * - `notificationIds`: identificadores devueltos por `expo-notifications`
+ *   para poder cancelar las notificaciones programadas.
+ * - `isCompleted`: si el usuario ya marcó la tarea como hecha.
+ * - `alertOffsetHours`: array con las antelaciones elegidas (1, 6, 12, 24h).
+ *   Por cada elemento hay una notificación programada.
  */
 export type Reminder = {
   id: string;
@@ -32,31 +32,26 @@ export type Reminder = {
   imageUri?: string;
   notificationIds: string[];
   isCompleted: boolean;
-  alertOffsetHours: AlertOffsetHours;
-  isPermanent: boolean;
+  alertOffsetHours: AlertOffsetHours[];
 };
 
 /**
- * Datos necesarios para crear un recordatorio. El store se encarga de generar
- * `id`, inicializar `notificationIds` y poner `isCompleted` en `false`.
+ * Datos necesarios para crear un recordatorio. El store rellena `id`,
+ * `notificationIds` (tras programar) e `isCompleted: false`.
  */
 export type NewReminderInput = {
   title: string;
   targetDate: Date;
-  alertOffsetHours: AlertOffsetHours;
-  isPermanent: boolean;
+  alertOffsetHours: AlertOffsetHours[];
   imageUri?: string;
-  notificationIds?: string[];
 };
 
 /**
- * Cambios aplicables a un recordatorio existente al editarlo. Sólo los
- * campos editables están aquí — el `id` se pasa aparte.
+ * Cambios aplicables a un recordatorio existente al editarlo.
  */
 export type UpdateReminderInput = {
   title: string;
   targetDate: Date;
-  alertOffsetHours: AlertOffsetHours;
-  isPermanent: boolean;
+  alertOffsetHours: AlertOffsetHours[];
   imageUri?: string;
 };

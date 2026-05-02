@@ -1,12 +1,11 @@
 import { useColorScheme } from 'react-native';
 
-import { useThemeStore } from './themeStore';
+import { useRemindersStore } from './remindersStore';
 
 /**
- * Paleta usada por toda la app. Mantenemos un superset común y luego
- * dos versiones (claro/oscuro). Los componentes piden colores por su rol
- * semántico (`text`, `surface`, etc.), no por su valor concreto, para que
- * el tema se pueda cambiar globalmente sin tocar componentes.
+ * Paleta de colores semánticos. Los componentes piden colores por su rol
+ * (`text`, `surface`, `danger`, …) en lugar de por valor concreto, así el
+ * tema se cambia globalmente sin tocar componentes.
  */
 export type Palette = {
   background: string;
@@ -27,6 +26,9 @@ export type Palette = {
   itemDefaultText: string;
   itemAlertText: string;
   itemCompletedText: string;
+  /** Fondo del chip seleccionado en selectores segmentados. */
+  chipSelected: string;
+  chipSelectedText: string;
 };
 
 export const lightPalette: Palette = {
@@ -34,7 +36,7 @@ export const lightPalette: Palette = {
   surface: '#ffffff',
   surfaceElevated: '#ffffff',
   text: '#111111',
-  textSecondary: '#666666',
+  textSecondary: '#555555',
   textMuted: '#888888',
   border: '#e5e5e5',
   primary: '#2a8a6b',
@@ -47,6 +49,8 @@ export const lightPalette: Palette = {
   itemDefaultText: '#111111',
   itemAlertText: '#d33a3a',
   itemCompletedText: '#1f9e6e',
+  chipSelected: '#2a8a6b',
+  chipSelectedText: '#ffffff',
 };
 
 export const darkPalette: Palette = {
@@ -54,7 +58,7 @@ export const darkPalette: Palette = {
   surface: '#1a1a1d',
   surfaceElevated: '#26262a',
   text: '#f0f0f0',
-  textSecondary: '#a8a8b0',
+  textSecondary: '#bfbfc7',
   textMuted: '#7a7a82',
   border: '#2a2a2e',
   primary: '#3da88a',
@@ -67,6 +71,8 @@ export const darkPalette: Palette = {
   itemDefaultText: '#f0f0f0',
   itemAlertText: '#ef5d5d',
   itemCompletedText: '#3da88a',
+  chipSelected: '#3da88a',
+  chipSelectedText: '#0e0e10',
 };
 
 export type EffectiveTheme = 'light' | 'dark';
@@ -74,15 +80,17 @@ export type EffectiveTheme = 'light' | 'dark';
 export type ThemeContext = {
   palette: Palette;
   effective: EffectiveTheme;
+  /** El modo elegido por el usuario, no el resuelto. */
+  mode: 'system' | 'light' | 'dark';
 };
 
 /**
- * Hook principal: devuelve la paleta correcta combinando la preferencia
- * persistida del usuario (`system` | `light` | `dark`) con el modo del
- * sistema operativo cuando la preferencia es `system`.
+ * Hook principal: combina la preferencia del usuario (`useRemindersStore.theme`)
+ * con el modo del sistema operativo cuando la preferencia es `'system'`.
+ * Devuelve la paleta efectiva ya resuelta.
  */
 export function useNudoTheme(): ThemeContext {
-  const mode = useThemeStore((s) => s.mode);
+  const mode = useRemindersStore((s) => s.theme);
   const systemScheme = useColorScheme();
 
   const effective: EffectiveTheme =
@@ -91,5 +99,6 @@ export function useNudoTheme(): ThemeContext {
   return {
     palette: effective === 'dark' ? darkPalette : lightPalette,
     effective,
+    mode,
   };
 }
