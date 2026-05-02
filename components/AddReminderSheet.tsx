@@ -197,14 +197,6 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
       });
     };
 
-    const showPremiumLockedAlert = (label: string) => {
-      Alert.alert(
-        `${label} es Premium`,
-        'Esta función estará disponible al actualizar a Nudo Premium.',
-        [{ text: 'Entendido' }],
-      );
-    };
-
     const canSubmit =
       title.trim().length > 0 && targetDate.getTime() > Date.now();
 
@@ -337,19 +329,6 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
             Puedes elegir varios; sonará una notificación por cada uno.
           </Text>
 
-          <View style={styles.premiumGroup}>
-            <PremiumLockedRow
-              icon="image-outline"
-              label="Añadir Foto"
-              onPress={() => showPremiumLockedAlert('Añadir Foto')}
-            />
-            <PremiumLockedRow
-              icon="notifications-outline"
-              label="Personalizar Avisos"
-              onPress={() => showPremiumLockedAlert('Personalizar Avisos')}
-            />
-          </View>
-
           <Pressable
             style={[
               styles.submitButton,
@@ -369,27 +348,6 @@ export const AddReminderSheet = forwardRef<AddReminderSheetMethods>(
 );
 
 AddReminderSheet.displayName = 'AddReminderSheet';
-
-type PremiumLockedRowProps = {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-};
-
-function PremiumLockedRow({ icon, label, onPress }: PremiumLockedRowProps) {
-  const { palette } = useNudoTheme();
-  const styles = useStyles();
-  return (
-    <Pressable style={styles.premiumRow} onPress={onPress}>
-      <Ionicons name={icon} size={20} color={palette.textMuted} />
-      <Text style={styles.premiumLabel}>{label}</Text>
-      <View style={styles.premiumBadge}>
-        <Ionicons name="lock-closed" size={12} color="#fff" />
-        <Text style={styles.premiumBadgeText}>Premium</Text>
-      </View>
-    </Pressable>
-  );
-}
 
 /**
  * Hook que devuelve estilos teñidos por el tema actual. Memoizado para
@@ -469,37 +427,6 @@ function useStyles() {
           marginTop: 6,
           fontSize: 12,
           color: palette.textMuted,
-        },
-        premiumGroup: { marginTop: 20, gap: 8 },
-        premiumRow: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          borderWidth: 1,
-          borderColor: palette.border,
-          borderRadius: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 14,
-          backgroundColor: palette.surfaceElevated,
-        },
-        premiumLabel: {
-          flex: 1,
-          fontSize: 15,
-          color: palette.textSecondary,
-        },
-        premiumBadge: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 4,
-          backgroundColor: palette.premiumGold,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 12,
-        },
-        premiumBadgeText: {
-          color: '#fff',
-          fontSize: 11,
-          fontWeight: '700',
         },
         submitButton: {
           marginTop: 24,

@@ -71,16 +71,55 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
-/** Texto "Faltan HH:00:00" calculado a partir del offset elegido. */
+/**
+ * Texto del cuerpo de la notificación. Como Android no permite actualizar
+ * el body cada segundo en una notificación normal, mostramos el offset
+ * elegido en lenguaje natural ("Faltan 1 hora", "Faltan 6 horas", …).
+ */
 function formatOffsetCountdown(offsetHours: AlertOffsetHours): string {
-  const hh = offsetHours.toString().padStart(2, '0');
-  return `Faltan ${hh}:00:00`;
+  return offsetHours === 1
+    ? 'Faltan 1 hora'
+    : `Faltan ${offsetHours} horas`;
 }
 
 /**
  * Programa UNA notificación local para un offset concreto. Devuelve el ID
  * o `null` si la fecha resultante ya ha pasado / está demasiado próxima.
  */
+/**
+ * Programa la notificación que suena justo cuando el recordatorio
+ * "termina" (es decir, al alcanzar `targetDate`). Devuelve el ID o
+ * `null` si la fecha objetivo ya está pasada.
+ */
+async function scheduleEnd(
+  reminderId: string,
+  title: string,
+  targetDate: Date,
+): Promise<string | null> {
+  const target = new Date(targetDate);
+  const triggerMs = target.getTime();
+  if (triggerMs <= Date.now() + 5 * 1000) return null;
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body: 'Tu recordatorio ha terminado',
+      // Color rojo: es el momento de actuar.
+      color: URGENT_COLOR,
+      data: {
+        reminderId,
+        targetDate: target.toISOString(),
+        kind: 'end',
+      },
+    },
+    trigger: {
+      type: SchedulableTriggerInputTypes.DATE,
+      date: new Date(triggerMs),
+      ...(Platform.OS === 'android' && { channelId: ANDROID_CHANNEL_ID }),
+    },
+  });
+  return id;
+}
+
 async function scheduleOne(
   reminderId: string,
   title: string,
@@ -133,7 +172,7 @@ export async function scheduleReminderNotifications(
   // Asegurar canal antes de programar (idempotente).
   await configureNotifications();
 
-  const results = await Promise.all(
+  const offsetResults = await Promise.all(
     alertOffsetHours.map((offset) =>
       scheduleOne(reminderId, title, targetDate, offset).catch((err) => {
         console.warn('[Nudo] Falló programar notificación', offset, err);
@@ -142,7 +181,18 @@ export async function scheduleReminderNotifications(
     ),
   );
 
-  return results.filter((id): id is string => id !== null);
+  // Notificación "fin": exactamente en `targetDate`. Va siempre, además
+  // de los avisos previos, para que el usuario sepa que llegó la hora.
+  const endResult = await scheduleEnd(reminderId, title, targetDate).catch(
+    (err) => {
+      console.warn('[Nudo] Falló programar notificación de fin', err);
+      return null;
+    },
+  );
+
+  return [...offsetResults, endResult].filter(
+    (id): id is string => id !== null,
+  );
 }
 
 /**

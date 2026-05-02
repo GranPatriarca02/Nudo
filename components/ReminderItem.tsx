@@ -19,12 +19,8 @@ type Props = {
   onEdit: (reminder: Reminder) => void;
 };
 
-const SWIPE_ACTION_WIDTH = 120;
+const SWIPE_ACTION_WIDTH = 100;
 
-/**
- * Calcula la diferencia en milisegundos entre `target` y el momento actual.
- * Acepta también string para protegerse de targetDate persistido como ISO.
- */
 const computeRemaining = (target: Date | string): number => {
   const dateObj = typeof target === 'string' ? new Date(target) : target;
   return dateObj.getTime() - Date.now();
@@ -43,15 +39,18 @@ const formatCountdown = (msRemaining: number): string => {
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
- * Acción que se revela al deslizar el item hacia la derecha.
- * El fondo verde se "desliza" junto con el dedo gracias a `useAnimatedStyle`.
+ * Acción que se revela al deslizar hacia la derecha. Es un `Pressable`
+ * con un icono de check: el usuario primero desliza para revelarlo y
+ * luego tiene que pulsarlo para confirmar la acción de "completado".
  */
 function CompleteAction({
   drag,
+  onPress,
   bg,
 }: {
   prog: SharedValue<number>;
   drag: SharedValue<number>;
+  onPress: () => void;
   bg: string;
 }) {
   const animatedStyle = useAnimatedStyle(() => ({
@@ -69,9 +68,21 @@ function CompleteAction({
         animatedStyle,
       ]}
     >
-      <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
-        Completar
-      </Text>
+      <Pressable
+        onPress={onPress}
+        hitSlop={8}
+        accessibilityLabel="Marcar como completado"
+        style={({ pressed }) => ({
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: pressed ? 'rgba(255,255,255,0.25)' : 'transparent',
+          justifyContent: 'center',
+          alignItems: 'center',
+        })}
+      >
+        <Ionicons name="checkmark-circle" size={42} color="#fff" />
+      </Pressable>
     </Reanimated.View>
   );
 }
@@ -90,8 +101,7 @@ export function ReminderItem({
   );
   const swipeableRef = useRef<SwipeableMethods>(null);
 
-  // Contador en tiempo real. Se reinicia si cambia la fecha objetivo o
-  // si el usuario marca/desmarca como completado.
+  // Contador en tiempo real. Se reinicia si cambia la fecha o el estado.
   useEffect(() => {
     if (reminder.isCompleted) return;
     const tick = () => setRemaining(computeRemaining(reminder.targetDate));
@@ -106,18 +116,16 @@ export function ReminderItem({
     return () => clearInterval(intervalId);
   }, [reminder.targetDate, reminder.isCompleted]);
 
-  const handleSwipeOpen = (direction: 'left' | 'right') => {
-    if (direction === 'left') {
-      onComplete(reminder.id);
-      swipeableRef.current?.close();
-    }
+  /**
+   * Al pulsar el check revelado por el swipe: completar y cerrar el panel.
+   * Importante: no completamos automáticamente al cruzar el umbral; el
+   * usuario tiene que hacer un segundo gesto explícito (el tap).
+   */
+  const handleConfirmComplete = () => {
+    onComplete(reminder.id);
+    swipeableRef.current?.close();
   };
 
-  /**
-   * "Ventana de aviso": desde el primer offset (el más lejano) hasta
-   * `targetDate`. Mientras está en esa ventana pintamos texto en rojo.
-   * Si está completado, en verde. Si está vencido sin completar, rojo.
-   */
   const isInAlertWindow = useMemo(() => {
     if (reminder.isCompleted) return false;
     if (reminder.alertOffsetHours.length === 0) return false;
@@ -126,17 +134,14 @@ export function ReminderItem({
   }, [remaining, reminder.alertOffsetHours, reminder.isCompleted]);
 
   const isExpired = !reminder.isCompleted && remaining <= 0;
-
   const countdownText = reminder.isCompleted
     ? 'Completado'
     : formatCountdown(remaining);
-
   const titleColor = reminder.isCompleted
     ? palette.itemCompletedText
     : isInAlertWindow || isExpired
       ? palette.itemAlertText
       : palette.itemDefaultText;
-
   const countdownColor = titleColor;
 
   const confirmDelete = () => {
@@ -162,22 +167,40 @@ export function ReminderItem({
           .join(', ')}`
       : '';
 
+  // Una vez completado el recordatorio queda inmutable: no se puede editar
+  // tocándolo y tampoco se puede deslizar para volver a "completar".
+  const handleRowPress = reminder.isCompleted
+    ? undefined
+    : () => onEdit(reminder);
+
   return (
     <ReanimatedSwipeable
       ref={swipeableRef}
       friction={2}
-      leftThreshold={SWIPE_ACTION_WIDTH / 2}
+      leftThreshold={SWIPE_ACTION_WIDTH * 0.6}
+      // Mantenemos el panel abierto al cruzar el umbral en lugar de
+      // disparar la acción: el usuario tiene que pulsar el check para
+      // confirmar que quiere completar.
+      overshootLeft={false}
       enabled={!reminder.isCompleted}
       renderLeftActions={(prog, drag) => (
-        <CompleteAction prog={prog} drag={drag} bg={palette.success} />
+        <CompleteAction
+          prog={prog}
+          drag={drag}
+          onPress={handleConfirmComplete}
+          bg={palette.success}
+        />
       )}
-      onSwipeableOpen={handleSwipeOpen}
     >
       <Pressable
-        onPress={() => onEdit(reminder)}
+        onPress={handleRowPress}
+        disabled={reminder.isCompleted}
         style={({ pressed }) => [
           styles.row,
-          pressed && { backgroundColor: palette.surfaceElevated },
+          pressed &&
+            !reminder.isCompleted && {
+              backgroundColor: palette.surfaceElevated,
+            },
         ]}
       >
         <View style={styles.info}>
@@ -203,21 +226,6 @@ export function ReminderItem({
             {offsetsLabel}
           </Text>
         </View>
-
-        {!reminder.isCompleted && (
-          <Pressable
-            onPress={() => onComplete(reminder.id)}
-            hitSlop={8}
-            style={styles.actionButton}
-            accessibilityLabel="Marcar como hecho"
-          >
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={26}
-              color={palette.success}
-            />
-          </Pressable>
-        )}
 
         <Pressable
           onPress={confirmDelete}
